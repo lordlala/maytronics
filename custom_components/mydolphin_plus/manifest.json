@@ -1,11 +1,11 @@
 {
     "domain": "mydolphin_plus",
     "name": "MyDolphin Plus",
-    "documentation": "https://github.com/elad-bar/ha-mydolphin-plus",
-    "issue_tracker": "https://github.com/elad-bar/ha-mydolphin-plus/issues",
+    "documentation": "https://github.com/lordlala/maytronics/info.md",
+    "issue_tracker": "https://github.com/lordlala/maytronics/issues",
     "after_dependencies": [],
     "dependencies": [],
-    "codeowners": ["@elad-bar"],
+    "codeowners": ["@lordlala"],
     "requirements": [ 
       "AWSIoTPythonSDK"
      ],
