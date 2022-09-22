@@ -6,7 +6,9 @@
     "after_dependencies": [],
     "dependencies": [],
     "codeowners": ["@elad-bar"],
-    "requirements": [  ],
+    "requirements": [ 
+      "AWSIoTPythonSDK"
+     ],
     "config_flow": true,
     "version": "0.0.1",
     "iot_class": "local_polling"
