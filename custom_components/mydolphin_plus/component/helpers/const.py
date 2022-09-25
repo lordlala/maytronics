@@ -55,7 +55,6 @@ AWS_HEADER_HOST = "host"
 AWS_HEADER_DATE = "x-amz-date"
 AWS_HEADER_TARGET = "x-amz-target"
 
-
 AWS_CONTENT_TYPE = "application/x-amz-json-1.0"
 AMZ_TARGET = "DynamoDB_20120810.Query"
 AWS_METHOD = "POST\n/\n"
@@ -72,17 +71,7 @@ AWS_DYNAMODB_SERVICE = "dynamodb"
 TOPIC_GET = "$aws/things/{}/shadow/get/#"
 TOPIC_UPDATE = "$aws/things/{}/shadow/update/#"
 TOPIC_DYNAMIC = "Maytronics/{}/main"
-TOPIC_SHADOW1 = "$aws/things/{}/shadow/get/accepted"
-TOPIC_SHADOW2 = "$aws/things/{}/shadow/get"
-TOPIC_SHADOW3 = "$aws/things/{}/shadow/update/accepted"
-TOPIC_SHADOW4 = "$aws/things/{}/shadow/update/rejected"
-TOPIC_SHADOW5 = "$aws/things/{}/shadow/get/rejected"
-TOPIC_SHADOW6 = "$aws/things/{}/shadow/update/delta"
-TOPIC_SHADOW7 = "$aws/things/{}/shadow/update"
-TOPIC_SHADOW = "$aws/things/{}/shadow/#"
-TOPIC_PUBLISH = "$aws/things/{}/shadow/update"
-#TOPICS = [TOPIC_DYNAMIC, TOPIC_UPDATE, TOPIC_GET, TOPIC_SHADOW1, TOPIC_SHADOW2, TOPIC_SHADOW3, TOPIC_SHADOW4, TOPIC_SHADOW5, TOPIC_SHADOW6]
-TOPICS = [TOPIC_DYNAMIC, TOPIC_SHADOW]
+TOPICS = [TOPIC_DYNAMIC, TOPIC_UPDATE, TOPIC_GET]
 
 DATA_ROBOT_DETAILS = {
     "SERNUM": "Serial Number",
@@ -93,4 +82,42 @@ DATA_ROBOT_DETAILS = {
     "MyRobotName": "Robot Name",
     "isReg": "Is Registered",
     "RobotFamily": "Product Family"
+}
+
+REPORTED_CATEGORIES = [
+    "weeklySettings",
+    "delay",
+    "systemState",
+    "debug",
+    "filterBagIndication",
+    "cycleInfo"
+]
+
+ATTR_CLEANING_MODE = "cleaning_mode"
+ATTR_LED_MODE = "led_mode"
+
+CLEANING_MODE_REGULAR = "Regular"
+CLEANING_MODE_FAST_MODE = "Floor only"
+CLEANING_MODE_FLOOR_ONLY = "regular"
+CLEANING_MODE_WATER_LINE = "Water line"
+CLEANING_MODE_ULTRA_CLEAN = "Ultra clean"
+CLEANING_MODE_ICON_DEFAULT = "mdi:border-all-variant"
+
+ICON_CLEANING_MODES = {
+    CLEANING_MODE_REGULAR: CLEANING_MODE_ICON_DEFAULT,
+    CLEANING_MODE_FAST_MODE: "mdi:clock-fast",
+    CLEANING_MODE_FLOOR_ONLY: "mdi:border-bottom-variant",
+    CLEANING_MODE_WATER_LINE: "mdi:format-align-top",
+    CLEANING_MODE_ULTRA_CLEAN: "mdi:border-all"
+}
+
+LED_MODE_BLINKING = "Blinking"
+LED_MODE_ALWAYS_ON = "Always on"
+LED_MODE_DISCO = "Disco"
+LED_MODE_ICON_DEFAULT = "mdi:lighthouse-on"
+
+ICON_LED_MODES = {
+    LED_MODE_BLINKING: LED_MODE_ICON_DEFAULT,
+    LED_MODE_ALWAYS_ON: "mdi:lightbulb-on",
+    LED_MODE_DISCO: "mdi:lightbulb-multiple-outline"
 }

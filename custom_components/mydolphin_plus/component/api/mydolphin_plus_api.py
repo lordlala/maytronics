@@ -177,13 +177,11 @@ class MyDolphinPlusAPI:
 
         return result
 
-    async def async_update(self, caller = None):
+    async def async_update(self):
         _LOGGER.info(f"Updating data from XXX)")
-        if caller == 'serial':
-            return(self.serial)
-        else:
-            if self.status == ConnectivityStatus.Failed:
-                await self.initialize()
+
+        if self.status == ConnectivityStatus.Failed:
+            await self.initialize()
 
     async def _login(self):
         await self._service_login()
@@ -441,9 +439,7 @@ class MyDolphinPlusAPI:
 
     def _publish(self, topic, message):
         if self.status == ConnectivityStatus.Connected:
-            _LOGGER.debug(f"Publishing: {message} to {topic}")
-            self.awsiot_client.publish(topic, json.dumps(message), 1)
-            
+            self.awsiot_client.publish(topic, message, 1)
 
         else:
             _LOGGER.error(f"Failed to publish message: {message} to {topic}")
@@ -457,17 +453,24 @@ class MyDolphinPlusAPI:
 
             _LOGGER.debug(f"Message received for device {self.serial}, Topic: {message_topic}, Payload: {payload}")
 
-            self.payload = payload
+            if message_topic.endswith("shadow/update/accepted"):
+                state = payload.get("state", {})
+                reported = state.get("reported", {})
 
-        except:
-            try:
-                payload = message_payload
-                self.payload = payload
-                
-            except Exception as ex:
-                exc_type, exc_obj, tb = sys.exc_info()
-                line_number = tb.tb_lineno
-                _LOGGER.error(f"Callback parsing failed, Data: {message}, Error: {str(ex)}, Line: {line_number}")
+                is_connected = reported.get("isConnected", {})
+                self.data["isConnected"] = is_connected.get("connected", False)
+
+                for category in REPORTED_CATEGORIES:
+                    category_data = reported.get(category)
+
+                    if category_data is not None:
+                        self.data[category] = category_data
+
+        except Exception as ex:
+            exc_type, exc_obj, tb = sys.exc_info()
+            line_number = tb.tb_lineno
+
+            _LOGGER.error(f"Callback parsing failed, Data: {message}, Error: {str(ex)}, Line: {line_number}")
 
     def _sign_hex(self, key, data):
         result = self._internal_sign(key, data).hexdigest()
@@ -506,3 +509,106 @@ class MyDolphinPlusAPI:
             result = system_data_value.get("S")
 
         return result
+
+    async def _send_desired_command(self, payload):
+        _LOGGER.warning(f"Sending command is not implemented yet")
+
+    async def set_cleaning_mode(self, cleaning_mode):
+        _LOGGER.warning(f"Set cleaning mode is not implemented yet, Value: {cleaning_mode}")
+
+        await self._send_desired_command(None)
+
+    async def set_delay(self,
+                        enabled: bool | None = False,
+                        mode: str | None = "all",
+                        hours: int | None = 255,
+                        minutes: int | None = 255):
+
+        await self.set_schedule("delay", enabled, mode, hours, minutes)
+
+    async def set_schedule(self,
+                           day: str,
+                           enabled: bool | None = False,
+                           mode: str | None = "all",
+                           hours: int | None = 255,
+                           minutes: int | None = 255):
+        request_data = {
+            "weeklySettings": {
+                "triggeredBy": 0,
+                day: {
+                    "isEnabled": enabled,
+                    "cleaningMode": {
+                        "mode": mode
+                    },
+                    "time": {
+                        "hours": hours,
+                        "minutes": minutes
+                    }
+                }
+            }
+        }
+
+        _LOGGER.warning(f"Set schedule is not implemented yet, Desired: {request_data}")
+
+        await self._send_desired_command(request_data)
+
+    async def set_led_mode(self, mode: int):
+        default_data = {
+            "ledEnable": True,
+            "ledIntensity": 80,
+            "ledMode": mode
+        }
+
+        request_data = self.data.get("led", default_data)
+        request_data["ledMode"] = mode
+
+        _LOGGER.warning(f"Set led mode is not implemented yet, Desired: {request_data}")
+
+        await self._send_desired_command(request_data)
+
+    async def set_led_intensity(self, intensity: int):
+        default_data = {
+            "ledEnable": True,
+            "ledIntensity": intensity,
+            "ledMode": 1
+        }
+
+        request_data = self.data.get("led", default_data)
+        request_data["ledIntensity"] = intensity
+
+        _LOGGER.warning(f"Set led intensity is not implemented yet, Desired: {request_data}")
+
+        await self._send_desired_command(request_data)
+
+    async def set_led_enabled(self, is_enabled: bool):
+        default_data = {
+            "ledEnable": is_enabled,
+            "ledIntensity": 80,
+            "ledMode": 1
+        }
+
+        request_data = self.data.get("led", default_data)
+        request_data["ledEnable"] = is_enabled
+
+        _LOGGER.warning(f"Set led enabled mode is not implemented yet, Desired: {request_data}")
+
+        await self._send_desired_command(request_data)
+
+    async def drive(self, direction: str):
+        _LOGGER.warning(f"Drive is not implemented yet, Value: {direction}")
+
+        await self._send_desired_command(None)
+
+    async def set_power_state(self, is_on: bool):
+        request_data = None
+
+        if is_on:
+            request_data = {
+                "systemState": {
+                    "pwsState": "on"
+                }
+            }
+
+        _LOGGER.warning(f"Set power state is not implemented yet, Desired: {request_data}")
+
+        await self._send_desired_command(request_data)
