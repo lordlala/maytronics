@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import sys
+from typing import Callable
 import uuid
 
 from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
@@ -45,7 +46,9 @@ class MyDolphinPlusAPI:
     awsiot_id: str | None
     awsiot_client: AWSIoTMQTTClient | None
 
-    def __init__(self, hass: HomeAssistant | None, config_data: ConfigData):
+    callback: Callable[[], None]
+
+    def __init__(self, hass: HomeAssistant | None, config_data: ConfigData, callback: Callable[[], None] | None = None):
         try:
             self._last_update = datetime.now()
             self.hass = hass
@@ -66,6 +69,7 @@ class MyDolphinPlusAPI:
             self.awsiot_id = None
             self.awsiot_client = None
 
+            self.callback = callback
             self.data = {}
 
         except Exception as ex:
@@ -101,6 +105,27 @@ class MyDolphinPlusAPI:
 
             _LOGGER.error(
                 f"Failed to initialize MyDolphin Plus API ({self.base_url}), error: {ex}, line: {line_number}"
+            )
+
+    async def validate(self):
+        _LOGGER.info("Initializing MyDolphin Plus")
+
+        try:
+            if self.hass is None:
+                if self.session is not None:
+                    await self.session.close()
+
+                self.session = aiohttp.client.ClientSession()
+            else:
+                self.session = async_create_clientsession(hass=self.hass)
+
+            await self._service_login()
+        except Exception as ex:
+            exc_type, exc_obj, tb = sys.exc_info()
+            line_number = tb.tb_lineno
+
+            _LOGGER.error(
+                f"Failed to validate login to MyDolphin Plus API ({self.base_url}), error: {ex}, line: {line_number}"
             )
 
     def _validate_request(self, endpoint):
@@ -183,6 +208,8 @@ class MyDolphinPlusAPI:
         if self.status == ConnectivityStatus.Failed:
             await self.initialize()
 
+        self._refresh_details()
+
     async def _login(self):
         await self._service_login()
         await self._aws_login()
@@ -195,6 +222,8 @@ class MyDolphinPlusAPI:
             _LOGGER.info(f"{key}: {self.data[key]}")
 
         self._listen()
+
+        self._refresh_details()
 
     async def _service_login(self):
         try:
@@ -260,6 +289,11 @@ class MyDolphinPlusAPI:
             _LOGGER.error(f"Failed  to retrieve AWS token from service, Error: {str(ex)}, Line: {line_number}")
             self.status = ConnectivityStatus.Failed
 
+    def _refresh_details(self):
+        get_topic = TOPIC_GET.replace("/#", "").replace("{}", self.serial)
+
+        self.awsiot_client.publish(get_topic, None, 0)
+
     async def _load_details(self):
         if self.status != ConnectivityStatus.Connected:
             self.status = ConnectivityStatus.Failed
@@ -296,9 +330,12 @@ class MyDolphinPlusAPI:
     def _set_local_broker(self, broker, port):
         self.mqtt_client.connect(broker, port)
 
-    # This is pretty much straight out of AWS documentation RE creating a signature.
-    # Im not convinced its doing anything but every time it gets touched, things break
     def get_signature_key(self, key, date_stamp, service_name):
+        """
+        This is pretty much straight out of AWS documentation RE creating a signature.
+        I'm not convinced its doing anything but every time it gets touched, things break
+        """
+
         aws_key = f"AWS4{key}".encode()
 
         date_key = self._sign(aws_key, date_stamp)
@@ -431,7 +468,7 @@ class MyDolphinPlusAPI:
 
         if self.status == ConnectivityStatus.Connected:
             for topic in topics:
-                self.awsiot_client.subscribeAsync(topic, 0, None, self._internal_callback)
+                self.awsiot_client.subscribe(topic, 0, self._internal_callback)
 
         else:
             all_topics = self._string_join(topics, ", ")
@@ -439,7 +476,7 @@ class MyDolphinPlusAPI:
 
     def _publish(self, topic, message):
         if self.status == ConnectivityStatus.Connected:
-            self.awsiot_client.publish(topic, message, 1)
+            self.awsiot_client.publish(topic, message, 0)
 
         else:
             _LOGGER.error(f"Failed to publish message: {message} to {topic}")
@@ -451,20 +488,24 @@ class MyDolphinPlusAPI:
 
             payload = json.loads(message_payload)
 
-            _LOGGER.debug(f"Message received for device {self.serial}, Topic: {message_topic}, Payload: {payload}")
+            _LOGGER.info(f"Message received for device {self.serial}, Topic: {message_topic}")
 
-            if message_topic.endswith("shadow/update/accepted"):
+            if message_topic.endswith("update/accepted"):
+                self._refresh_details()
+
+            elif message_topic.endswith("get/accepted"):
                 state = payload.get("state", {})
                 reported = state.get("reported", {})
 
-                is_connected = reported.get("isConnected", {})
-                self.data["isConnected"] = is_connected.get("connected", False)
-
-                for category in REPORTED_CATEGORIES:
+                for category in reported.keys():
                     category_data = reported.get(category)
 
                     if category_data is not None:
+                        _LOGGER.debug(f"{category} - {category_data}")
                         self.data[category] = category_data
+
+                if self.callback is not None:
+                    self.callback()
 
         except Exception as ex:
             exc_type, exc_obj, tb = sys.exc_info()
@@ -510,28 +551,60 @@ class MyDolphinPlusAPI:
 
         return result
 
-    async def _send_desired_command(self, payload):
-        _LOGGER.warning(f"Sending command is not implemented yet")
+    async def _send_desired_command(self, payload: dict | None):
+        update_topic = TOPIC_UPDATE.replace("/#", "").replace("{}", self.serial)
+
+        new_state = {
+            "state": {
+                "desired": payload
+            }
+        }
+
+        request_data = json.dumps(new_state)
+
+        if self.status == ConnectivityStatus.Connected:
+            self.awsiot_client.publish(update_topic, request_data, 0)
+
+        else:
+            _LOGGER.error(f"Failed to publish message: {new_state} to {update_topic}")
 
     async def set_cleaning_mode(self, cleaning_mode):
-        _LOGGER.warning(f"Set cleaning mode is not implemented yet, Value: {cleaning_mode}")
+        data = {
+            "cycleInfo": {
+                "cleaningMode": {
+                    "mode": cleaning_mode
+                }
+            }
+        }
 
-        await self._send_desired_command(None)
+        _LOGGER.info(f"Set cleaning mode, Desired: {data}")
+        await self._send_desired_command(data)
 
     async def set_delay(self,
+                        device: str,
                         enabled: bool | None = False,
                         mode: str | None = "all",
-                        hours: int | None = 255,
-                        minutes: int | None = 255):
+                        job_time: str | None = None):
 
-        await self.set_schedule("delay", enabled, mode, hours, minutes)
+        await self.set_schedule(device, "delay", enabled, mode, job_time)
 
     async def set_schedule(self,
+                           device: str,
                            day: str,
                            enabled: bool | None = False,
                            mode: str | None = "all",
-                           hours: int | None = 255,
-                           minutes: int | None = 255):
+                           job_time: str | None = None):
+        if device != self.serial:
+            return
+
+        hours = 255
+        minutes = 255
+
+        if enabled:
+            job_time_parts = job_time.split(":")
+            hours = int(job_time_parts[0])
+            minutes = int(job_time_parts[1])
+
         request_data = {
             "weeklySettings": {
                 "triggeredBy": 0,
@@ -548,8 +621,7 @@ class MyDolphinPlusAPI:
             }
         }
 
-        _LOGGER.warning(f"Set schedule is not implemented yet, Desired: {request_data}")
-
+        _LOGGER.info(f"Set schedule, Desired: {request_data}")
         await self._send_desired_command(request_data)
 
     async def set_led_mode(self, mode: int):
@@ -560,11 +632,14 @@ class MyDolphinPlusAPI:
         }
 
         request_data = self.data.get("led", default_data)
-        request_data["ledMode"] = mode
+        request_data["ledMode"] = int(mode)
 
-        _LOGGER.warning(f"Set led mode is not implemented yet, Desired: {request_data}")
+        data = {
+            "led": request_data
+        }
 
-        await self._send_desired_command(request_data)
+        _LOGGER.info(f"Set led mode, Desired: {data}")
+        await self._send_desired_command(data)
 
     async def set_led_intensity(self, intensity: int):
         default_data = {
@@ -576,9 +651,12 @@ class MyDolphinPlusAPI:
         request_data = self.data.get("led", default_data)
         request_data["ledIntensity"] = intensity
 
-        _LOGGER.warning(f"Set led intensity is not implemented yet, Desired: {request_data}")
+        data = {
+            "led": request_data
+        }
 
-        await self._send_desired_command(request_data)
+        _LOGGER.info(f"Set led intensity, Desired: {data}")
+        await self._send_desired_command(data)
 
     async def set_led_enabled(self, is_enabled: bool):
         default_data = {
@@ -590,14 +668,28 @@ class MyDolphinPlusAPI:
         request_data = self.data.get("led", default_data)
         request_data["ledEnable"] = is_enabled
 
-        _LOGGER.warning(f"Set led enabled mode is not implemented yet, Desired: {request_data}")
+        data = {
+            "led": request_data
+        }
 
-        await self._send_desired_command(request_data)
+        _LOGGER.info(f"Set led enabled mode, Desired: {data}")
+        await self._send_desired_command(data)
 
-    async def drive(self, direction: str):
+    async def drive(self, device: str, direction: str):
+        if device != self.serial:
+            return
+
         _LOGGER.warning(f"Drive is not implemented yet, Value: {direction}")
 
-        await self._send_desired_command(None)
+        # await self._send_desired_command(None)
+
+    async def pickup(self, device: str):
+        if device != self.serial:
+            return
+
+        _LOGGER.warning(f"Pickup is not implemented yet")
+
+        # await self._send_desired_command(None)
 
     async def set_power_state(self, is_on: bool):
         request_data = None
@@ -609,6 +701,5 @@ class MyDolphinPlusAPI:
                 }
             }
 
-        _LOGGER.warning(f"Set power state is not implemented yet, Desired: {request_data}")
-
+        _LOGGER.info(f"Set power state, Desired: {request_data}")
         await self._send_desired_command(request_data)

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.switch import SwitchEntity
+from homeassistant.components.light import ColorMode, LightEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 
@@ -20,7 +20,7 @@ _LOGGER = logging.getLogger(__name__)
 
 DEPENDENCIES = [DOMAIN]
 
-CURRENT_DOMAIN = DOMAIN_SWITCH
+CURRENT_DOMAIN = DOMAIN_LIGHT
 
 
 async def async_setup_entry(hass, config_entry, async_add_devices):
@@ -37,14 +37,14 @@ async def async_unload_entry(hass, config_entry):
 
 
 def get_switch(hass: HomeAssistant, entity: EntityData):
-    switch = MyDolphinPlusSwitch()
+    switch = MyDolphinPlusLight()
     switch.initialize(hass, entity, CURRENT_DOMAIN)
 
     return switch
 
 
-class MyDolphinPlusSwitch(SwitchEntity, MyDolphinPlusEntity):
-    """Class for a Shinobi Video switch."""
+class MyDolphinPlusLight(LightEntity, MyDolphinPlusEntity):
+    """Class for a light."""
 
     _attr_entity_category = EntityCategory.CONFIG
 
@@ -63,6 +63,11 @@ class MyDolphinPlusSwitch(SwitchEntity, MyDolphinPlusEntity):
 
     async def set_mode(self, enabled: bool):
         await self.entity.action(enabled)
+
+    @property
+    def supported_color_modes(self) -> set[ColorMode] | set[str] | None:
+        """Flag supported color modes."""
+        return set(ColorMode.ONOFF)
 
     def turn_on(self, **kwargs) -> None:
         pass
